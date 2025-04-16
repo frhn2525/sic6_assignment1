@@ -1,0 +1,464 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP32 Accident Detection Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- Leaflet CSS for map -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      .dashboard-card {
+        transition: all 0.3s;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      }
+      .status-indicator {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+      }
+      .status-active {
+        background-color: #28a745;
+      }
+      .status-inactive {
+        background-color: #dc3545;
+      }
+      .status-warning {
+        background-color: #ffc107;
+      }
+      #map {
+        height: 300px;
+        border-radius: 8px;
+      }
+      .chart-container {
+        position: relative;
+        height: 250px;
+      }
+      .reading-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+      }
+      .badge-custom {
+        font-size: 1rem;
+      }
+      .state-PARK {
+        background-color: #28a745;
+      }
+      .state-MOVING {
+        background-color: #17a2b8;
+      }
+      .state-ACCIDENT {
+        background-color: #dc3545;
+        animation: blink 1s infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.5;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-dark bg-dark">
+      <div class="container">
+        <span class="navbar-brand mb-0 h1"
+          >ESP32 Accident Detection System</span
+        >
+        <div class="d-flex text-light">
+          <div id="status-indicator">
+            <span class="status-indicator status-inactive"></span>
+            <span id="connection-status">Connecting...</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mt-4">
+      <div class="row">
+        <!-- System Status Card -->
+        <div class="col-lg-6 col-md-12">
+          <div class="card dashboard-card">
+            <div class="card-header bg-primary text-white">
+              <h5 class="card-title mb-0">System Status</h5>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <p>
+                    State:
+                    <span
+                      id="system-state"
+                      class="badge rounded-pill state-PARK"
+                      >PARK</span
+                    >
+                  </p>
+                  <p>Movement: <span id="movement-status">No</span></p>
+                </div>
+                <div class="col-md-6">
+                  <p>Last Update: <span id="last-update">--</span></p>
+                  <p>Device ID: <span>ESP32-AD001</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Card -->
+        <div class="col-lg-6 col-md-12">
+          <div class="card dashboard-card">
+            <div class="card-header bg-info text-white">
+              <h5 class="card-title mb-0">Location</h5>
+            </div>
+            <div class="card-body">
+              <div id="map"></div>
+              <div class="row mt-2">
+                <div class="col-md-6">
+                  <p>Latitude: <span id="latitude">--</span></p>
+                </div>
+                <div class="col-md-6">
+                  <p>Longitude: <span id="longitude">--</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accelerometer Card -->
+        <div class="col-lg-6 col-md-12">
+          <div class="card dashboard-card">
+            <div class="card-header bg-success text-white">
+              <h5 class="card-title mb-0">Accelerometer Readings</h5>
+            </div>
+            <div class="card-body">
+              <div class="row mb-3">
+                <div class="col-12 text-center">
+                  <div>Magnitude</div>
+                  <div id="accel-magnitude" class="reading-value">0.87</div>
+                </div>
+              </div>
+              <div class="row text-center">
+                <div class="col-4">
+                  <div>X-Axis</div>
+                  <div id="accel-x" class="reading-value">0.109</div>
+                </div>
+                <div class="col-4">
+                  <div>Y-Axis</div>
+                  <div id="accel-y" class="reading-value">-0.035</div>
+                </div>
+                <div class="col-4">
+                  <div>Z-Axis</div>
+                  <div id="accel-z" class="reading-value">0.863</div>
+                </div>
+              </div>
+              <div class="chart-container mt-3">
+                <canvas id="accelerometerChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gyroscope Card -->
+        <div class="col-lg-6 col-md-12">
+          <div class="card dashboard-card">
+            <div class="card-header bg-warning text-dark">
+              <h5 class="card-title mb-0">Gyroscope Readings</h5>
+            </div>
+            <div class="card-body">
+              <div class="row mb-3">
+                <div class="col-12 text-center">
+                  <div>Magnitude</div>
+                  <div id="gyro-magnitude" class="reading-value">3.249</div>
+                </div>
+              </div>
+              <div class="row text-center">
+                <div class="col-4">
+                  <div>X-Axis</div>
+                  <div id="gyro-x" class="reading-value">-3.115</div>
+                </div>
+                <div class="col-4">
+                  <div>Y-Axis</div>
+                  <div id="gyro-y" class="reading-value">0.611</div>
+                </div>
+                <div class="col-4">
+                  <div>Z-Axis</div>
+                  <div id="gyro-z" class="reading-value">-0.695</div>
+                </div>
+              </div>
+              <div class="chart-container mt-3">
+                <canvas id="gyroscopeChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet JS for map -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script>
+      // Initialize data arrays for charts
+      const accelData = {
+        labels: [],
+        x: [],
+        y: [],
+        z: [],
+        magnitude: [],
+      };
+
+      const gyroData = {
+        labels: [],
+        x: [],
+        y: [],
+        z: [],
+        magnitude: [],
+      };
+
+      // Initialize map
+      let map = L.map("map").setView([0, 0], 2);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      let marker = L.marker([0, 0]).addTo(map);
+
+      // Initialize charts
+      const accelChart = new Chart(
+        document.getElementById("accelerometerChart"),
+        {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "X",
+                data: [],
+                borderColor: "rgba(255, 99, 132, 1)",
+                tension: 0.1,
+                borderWidth: 2,
+                pointRadius: 0,
+              },
+              {
+                label: "Y",
+                data: [],
+                borderColor: "rgba(54, 162, 235, 1)",
+                tension: 0.1,
+                borderWidth: 2,
+                pointRadius: 0,
+              },
+              {
+                label: "Z",
+                data: [],
+                borderColor: "rgba(75, 192, 192, 1)",
+                tension: 0.1,
+                borderWidth: 2,
+                pointRadius: 0,
+              },
+              {
+                label: "Magnitude",
+                data: [],
+                borderColor: "rgba(153, 102, 255, 1)",
+                tension: 0.1,
+                borderWidth: 3,
+                pointRadius: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: false,
+              },
+            },
+            animation: {
+              duration: 0,
+            },
+          },
+        }
+      );
+
+      const gyroChart = new Chart(document.getElementById("gyroscopeChart"), {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "X",
+              data: [],
+              borderColor: "rgba(255, 99, 132, 1)",
+              tension: 0.1,
+              borderWidth: 2,
+              pointRadius: 0,
+            },
+            {
+              label: "Y",
+              data: [],
+              borderColor: "rgba(54, 162, 235, 1)",
+              tension: 0.1,
+              borderWidth: 2,
+              pointRadius: 0,
+            },
+            {
+              label: "Z",
+              data: [],
+              borderColor: "rgba(75, 192, 192, 1)",
+              tension: 0.1,
+              borderWidth: 2,
+              pointRadius: 0,
+            },
+            {
+              label: "Magnitude",
+              data: [],
+              borderColor: "rgba(153, 102, 255, 1)",
+              tension: 0.1,
+              borderWidth: 3,
+              pointRadius: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+            },
+          },
+          animation: {
+            duration: 0,
+          },
+        },
+      });
+
+      // Update chart with new data
+      function updateChart(chart, dataArray) {
+        chart.data.labels = dataArray.labels.slice(-20); // Keep last 20 data points
+        chart.data.datasets[0].data = dataArray.x.slice(-20);
+        chart.data.datasets[1].data = dataArray.y.slice(-20);
+        chart.data.datasets[2].data = dataArray.z.slice(-20);
+        chart.data.datasets[3].data = dataArray.magnitude.slice(-20);
+        chart.update();
+      }
+
+      // Update dashboard with new data
+      function updateDashboard(data) {
+        // Update connection status
+        document.getElementById("connection-status").innerText = "Connected";
+        document
+          .querySelector("#status-indicator .status-indicator")
+          .classList.remove("status-inactive");
+        document
+          .querySelector("#status-indicator .status-indicator")
+          .classList.add("status-active");
+
+        // Update system status
+        document.getElementById("system-state").innerText = data.system.state;
+        document.getElementById("system-state").className =
+          "badge rounded-pill state-" + data.system.state;
+        document.getElementById("movement-status").innerText = data.system
+          .movement
+          ? "Yes"
+          : "No";
+        document.getElementById("last-update").innerText =
+          data.formatted_time || "Unknown";
+
+        // Update location
+        if (data.location.valid) {
+          document.getElementById("latitude").innerText = data.location.lat;
+          document.getElementById("longitude").innerText = data.location.lon;
+
+          // Update map
+          map.setView([data.location.lat, data.location.lon], 14);
+          marker.setLatLng([data.location.lat, data.location.lon]);
+        } else {
+          document.getElementById("latitude").innerText = "Invalid";
+          document.getElementById("longitude").innerText = "Invalid";
+        }
+
+        // Update accelerometer readings
+        document.getElementById("accel-x").innerText =
+          data.sensor.accelerometer.x.toFixed(3);
+        document.getElementById("accel-y").innerText =
+          data.sensor.accelerometer.y.toFixed(3);
+        document.getElementById("accel-z").innerText =
+          data.sensor.accelerometer.z.toFixed(3);
+        document.getElementById("accel-magnitude").innerText =
+          data.sensor.accelerometer.magnitude.toFixed(3);
+
+        // Update gyroscope readings
+        document.getElementById("gyro-x").innerText =
+          data.sensor.gyroscope.x.toFixed(3);
+        document.getElementById("gyro-y").innerText =
+          data.sensor.gyroscope.y.toFixed(3);
+        document.getElementById("gyro-z").innerText =
+          data.sensor.gyroscope.z.toFixed(3);
+        document.getElementById("gyro-magnitude").innerText =
+          data.sensor.gyroscope.magnitude.toFixed(3);
+
+        // Update chart data
+        const now = new Date().toLocaleTimeString();
+
+        accelData.labels.push(now);
+        accelData.x.push(data.sensor.accelerometer.x);
+        accelData.y.push(data.sensor.accelerometer.y);
+        accelData.z.push(data.sensor.accelerometer.z);
+        accelData.magnitude.push(data.sensor.accelerometer.magnitude);
+
+        gyroData.labels.push(now);
+        gyroData.x.push(data.sensor.gyroscope.x);
+        gyroData.y.push(data.sensor.gyroscope.y);
+        gyroData.z.push(data.sensor.gyroscope.z);
+        gyroData.magnitude.push(data.sensor.gyroscope.magnitude);
+
+        updateChart(accelChart, accelData);
+        updateChart(gyroChart, gyroData);
+      }
+
+      // Fetch data from API and update dashboard
+      function fetchData() {
+        fetch("/api/data")
+          .then((response) => response.json())
+          .then((data) => {
+            updateDashboard(data);
+          })
+          .catch((error) => {
+            console.error("Error fetching data:", error);
+            document.getElementById("connection-status").innerText =
+              "Disconnected";
+            document
+              .querySelector("#status-indicator .status-indicator")
+              .classList.remove("status-active");
+            document
+              .querySelector("#status-indicator .status-indicator")
+              .classList.add("status-inactive");
+          });
+      }
+
+      // Initial data fetch
+      fetchData();
+
+      // Fetch data every 2 seconds
+      setInterval(fetchData, 2000);
+    </script>
+  </body>
+</html>
