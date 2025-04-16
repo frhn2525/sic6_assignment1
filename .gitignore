@@ -3,3 +3,4 @@ venv/
 firebase-credentials.json
 __pycache__
 frontend/flask/firebase-credentials.json
+frontend/flask/firebase-credentials.json
