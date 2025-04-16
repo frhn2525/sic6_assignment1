@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-paho-mqtt
-python-dotenv
-pytest
-firebase-admin
